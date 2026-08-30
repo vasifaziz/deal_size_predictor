@@ -23,9 +23,35 @@ Large = LABEL_MAP["Large"]
 @st.cache_resource
 def load_model():
     """Load the trained model pipeline"""
-    # Use path relative to this script file
-    model_path = Path(__file__).parent / "artifacts" / "dealsize_pipeline.pkl"
-    return joblib.load(model_path)
+    import os
+
+    # Try multiple path strategies
+    paths_to_try = [
+        Path(__file__).parent / "artifacts" / "dealsize_pipeline.pkl",
+        Path("artifacts/dealsize_pipeline.pkl"),
+        Path("./artifacts/dealsize_pipeline.pkl"),
+    ]
+
+    # Debug: print current working directory and file location
+    st.write(f"Current working directory: {os.getcwd()}")
+    st.write(f"Script location: {Path(__file__).parent}")
+
+    for model_path in paths_to_try:
+        st.write(f"Trying path: {model_path} (exists: {model_path.exists()})")
+        if model_path.exists():
+            try:
+                return joblib.load(model_path)
+            except Exception as e:
+                st.error(f"Failed to load from {model_path}: {str(e)}")
+                continue
+
+    # If all fails, show what files are available
+    st.error("Could not find model file. Available files:")
+    for root, dirs, files in os.walk("."):
+        for file in files:
+            st.write(os.path.join(root, file))
+
+    raise FileNotFoundError("Model file not found in any expected location")
 
 model = load_model()
 
