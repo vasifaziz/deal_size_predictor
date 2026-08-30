@@ -80,7 +80,7 @@ ORDERDATE = st.date_input(
     value=date.today()
 )
 
-ORDERDATE = ORDERDATE.strftime("%Y-%m-%d")
+ORDERDATE = ORDERDATE.strftime("%d/%m/%Y")
 
 input_data = pd.DataFrame({
 	"QUANTITYORDERED": [QUANTITYORDERED],
