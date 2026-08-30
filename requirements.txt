@@ -1,0 +1,9 @@
+# Pin these to whatever versions you actually trained with (run `pip freeze`
+# in your Colab notebook after training and copy the exact versions here).
+# Version mismatches between training (Colab) and serving (PyCharm/Streamlit
+# Cloud) are a common source of "pickle won't load" or silently different
+# predictions - always pin, never leave unpinned in a deployed project.
+scikit-learn>=1.4,<2.0
+pandas>=2.0,<3.0
+numpy>=1.26,<3.0
+joblib>=1.3
