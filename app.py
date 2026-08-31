@@ -1,39 +1,16 @@
-import json
 import streamlit as st
-import joblib
 import pandas as pd
 from datetime import date
-from pathlib import Path
 
-# Import required functions so pickle can unpickle custom transformers
-from dealsize_pipeline import (
-    predict_new_data,
-    add_date_features,
-    build_date_transformer,
-    build_preprocessor,
-    INVERSE_LABEL_MAP,
-    LABEL_MAP
-)
+from dealsize_pipeline import load_pipeline, predict_new_data
 
-# Load label mappings
-Small = LABEL_MAP["Small"]
-Medium = LABEL_MAP["Medium"]
-Large = LABEL_MAP["Large"]
 
 @st.cache_resource
 def load_model():
-    """Load the trained model pipeline."""
-    model_path = Path(__file__).parent / "artifacts" / "dealsize_pipeline.pkl"
+    """Load the trained model pipeline and its inference config"""
+    return load_pipeline()
 
-    if not model_path.exists():
-        raise FileNotFoundError(
-            f"Model file not found: {model_path}"
-        )
-
-    return joblib.load(model_path)
-
-
-model = load_model()
+model, config = load_model()
 
 
 st.title('Deal Size Predictor')
@@ -60,7 +37,7 @@ ORDERDATE = st.date_input(
     value=date.today()
 )
 
-ORDERDATE = ORDERDATE.strftime("%d/%m/%Y")
+ORDERDATE = ORDERDATE.strftime(config["date_format"])
 
 input_data = pd.DataFrame({
 	"QUANTITYORDERED": [QUANTITYORDERED],
@@ -79,32 +56,28 @@ st.dataframe(input_data)
 
 
 if st.button("Predict"):
-	prediction = model.predict(input_data)[0]
+	# predict_new_data reorders the columns to match training, applies the
+	# configured Large-class threshold, and maps the index back to a label.
+	result = predict_new_data(
+		model, input_data, large_threshold=config["large_threshold"]
+	).iloc[0]
 
-	probability = model.predict_proba(input_data)[0]
+	prediction = result["PREDICTED_DEALSIZE"]
+
+	confidence = result["CONFIDENCE"]
 
 	st.subheader("Prediction Result")
 
-	if prediction == Small:
+	if prediction == "Small":
 		st.success("The Deal Size is Small")
 
-		st.write(
-			f"**Probability of Deal Size is Small: **"
-			f"{probability[Small]:.2%}"
-			)
-
-	elif prediction == Medium:
+	elif prediction == "Medium":
 		st.warning("The Deal Size is Medium")
 
-		st.write(
-			f"**Probability of Deal Size is Medium: **"
-			f"{probability[Medium]:.2%}"
-			)
-
-	elif prediction == Large:
+	else:
 		st.error("The Deal Size is Large")
 
-		st.write(
-			f"**Probability of Deal Size is Large: **"
-			f"{probability[Large]:.2%}"
-			)
+	st.write(
+		f"**Probability of Deal Size is {prediction}: **"
+		f"{confidence:.2%}"
+		)
