@@ -8,6 +8,7 @@ Original file is located at
 """
 
 import json
+import sys
 import warnings
 from pathlib import Path
 
@@ -35,7 +36,6 @@ from pathlib import Path
 
 DATA_PATH = "/content/drive/MyDrive/PythonTesting/Auto Sales data.csv"   # change to your GitHub raw URL or local path
 OUTPUT_DIR = Path("artifacts")
-OUTPUT_DIR.mkdir(exist_ok=True)
 
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
@@ -204,6 +204,8 @@ def print_report(report: dict, cv_scores: np.ndarray) -> None:
     print("=" * 60)
 
 def save_artifacts(model, report: dict, chosen_threshold: float) -> None:
+    OUTPUT_DIR.mkdir(exist_ok=True)
+
     joblib.dump(model, OUTPUT_DIR / "dealsize_pipeline.pkl")
 
     with open(OUTPUT_DIR / "label_map.json", "w") as f:
@@ -233,6 +235,48 @@ def save_artifacts(model, report: dict, chosen_threshold: float) -> None:
     print("  - label_map.json          (Small=0, Medium=1, Large=2 - ordinal, business-meaningful)")
     print("  - inference_config.json   (required columns, chosen threshold, date format)")
     print("  - evaluation_report.json  (full metrics for record-keeping)")
+
+def find_artifact(filename: str) -> Path:
+    """Locate a saved artifact regardless of whether it sits in artifacts/ or beside the code.
+
+    Training writes to artifacts/, but some deployments flatten everything into the
+    repository root, so both layouts have to be searched.
+    """
+    module_dir = Path(__file__).resolve().parent
+    candidates = [
+        module_dir / OUTPUT_DIR.name / filename,
+        module_dir / filename,
+        Path.cwd() / OUTPUT_DIR.name / filename,
+        Path.cwd() / filename,
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+
+    tried = "\n  ".join(str(c) for c in candidates)
+    raise FileNotFoundError(f"Could not find artifact {filename!r}. Tried:\n  {tried}")
+
+
+def load_pipeline() -> tuple[Pipeline, dict]:
+    """Load the trained pipeline and its inference config.
+
+    Use this instead of calling joblib.load directly. The pipeline was trained in a
+    notebook, where add_date_features lived in the __main__ namespace, so the pickled
+    FunctionTransformer stores its func as a *reference* to __main__.add_date_features
+    rather than a copy. Unpickling therefore fails with an AttributeError unless that
+    name is resolvable on whichever module is registered as __main__ at load time.
+    Binding it here keeps the workaround in one place.
+    """
+    main_module = sys.modules.get("__main__")
+    if main_module is not None and not hasattr(main_module, "add_date_features"):
+        main_module.add_date_features = add_date_features
+
+    model = joblib.load(find_artifact("dealsize_pipeline.pkl"))
+
+    with open(find_artifact("inference_config.json")) as f:
+        config = json.load(f)
+
+    return model, config
 
 def predict_new_data(model, raw_df: pd.DataFrame, large_threshold: float = 0.5) -> pd.DataFrame:
     required_cols = RAW_NUM_FEATURES + [DATE_COL] + CAT_FEATURES
